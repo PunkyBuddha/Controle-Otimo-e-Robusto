@@ -38,7 +38,7 @@ Kv = diag([0.18227 0.17095 1]);
 Kz = 1;
 K_psi = 1;
 
-% Modelo em Espaço de Estados
+%% Modelo em Espaço de Estados
 A = [0 0 0     1       0       0;
      0 0 0     0       1       0;
      0 0 0     0       0       1;
@@ -51,7 +51,15 @@ B = [0 0 0 Ku(1,1)   0      0;
 C = zeros(1,6);
 D = zeros(1,3);
 
-% Matrizes de ponderação LQR
+%% Matrizes de ponderação LQR
+% Regra de Bryson
+Qii = [10 10 10 5 5 5].^-2;
+Rii = [1 1 1].^2;
+
+Q = diag(Qii);
+R = diag(Rii);
+
+x0 = [0 0 0 0 0 0]';
 
 figure();
 
