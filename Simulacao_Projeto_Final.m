@@ -33,33 +33,30 @@ ppsir = []; % Orientação realizada
 w = (2*pi)/30;
 Kd = diag([3 6]);
 Kp = diag([4.5 8.5]);
-Ku = diag([.88 .88 1]);
-Kv = diag([0.18227 0.17095 1]);
+Ku = diag([.88 .88]);
+Kv = diag([0.18227 0.17095]);
 Kz = 1;
 K_psi = 1;
 
 %% Modelo em Espaço de Estados
-A = [0 0 0     1       0       0;
-     0 0 0     0       1       0;
-     0 0 0     0       0       1;
-     0 0 0 -Kv(1,1)    0       0;
-     0 0 0     0   -Kv(2,2)    0;
-     0 0 0     0       0   -Kv(3,3)];
-B = [0 0 0 Ku(1,1)   0      0;
-     0 0 0    0   Ku(2,2)   0;
-     0 0 0    0      0   Ku(3,3)]';
-C = zeros(1,6);
-D = zeros(1,3);
+A = [0 0     1       0;
+     0 0     0       1;
+     0 0 -Kv(1,1)    0;
+     0 0     0   -Kv(2,2)];
+B = [0 0 Ku(1,1)   0;
+     0 0    0   Ku(2,2)]';
+C = [eye(2) zeros(2)];
+D = zeros(1,2);
 
 %% Matrizes de ponderação LQR
 % Regra de Bryson
-Qii = [10 10 10 5 5 5].^-2;
-Rii = [1 1 1].^2;
+Qii = [10 10 5 5].^-2;
+Rii = [1 1].^2;
 
 Q = diag(Qii);
 R = diag(Rii);
 
-x0 = [0 0 0 0 0 0]';
+[Klqr,Pc]=lqr(A,B,Q,R); % Solução do problema LQR de horizonte Infinito
 
 figure();
 
