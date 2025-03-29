@@ -5,40 +5,41 @@ catch
 end
 rosshutdown;
 
-% timers
-T_exp = 120; % Tempo de experimento
+%% Timers
+T_exp = 30; % Tempo de experimento
 t_exp = tic;
 T_run = 1/30; % Período do experimento
 t_run = tic;
 T_draw=0;
 tempo = [];
 
-% Vetores de armazenamento
+%% Vetores de armazenamento
 P = [0;0;0];
 V = [0;0;0];
 V_dot = [0;0;0];
+nu = [0;0];
 psi = 0;
 pd = []; % Posição desejada para plot
 pr = []; % Posição realizada para plot
 pveld = []; % Velocidade desejada para plot
 pvelr = []; % Velocidade realizada para plot
-paccr = []; % Aceleração realizada para plot
-paccd = []; % Aceleração desejada para plot
 pu = []; % Esforço de controlador
 er = []; % Erro para plot
 ppsid = []; % Orientação desejada
 ppsir = []; % Orientação realizada
 
-nur = [0;0];
-
 %% Ganhos / Parametros
-w = (2*pi)/30;
+w = (2*pi)/15;
 Kd = diag([3 6]);
 Kp = diag([4.5 8.5]);
 Ku = diag([.88 .88]);
 Kv = diag([0.18227 0.17095]);
 Kz = 1;
 K_psi = 1;
+
+%% Escolha do controlador
+% 1 - LQR
+flag_u = 2;
 
 %% Modelo em Espaço de Estados
 A = [0 0     1       0;
@@ -49,7 +50,9 @@ B = [0 0 Ku(1,1)   0;
      0 0    0   Ku(2,2)]';
 C = eye(4);
 D = zeros(4,2);
-sysc = ss(A,B,C,D);
+
+sysc = ss(A,B,C,D); % Sistema em tempo continuo
+sysd = c2d(sysc,T_run,'tustin'); % Sistema em tempo discreto
 
 %% Matrizes de ponderação LQR
 % Regra de Bryson
@@ -59,13 +62,19 @@ Rii = [5 5].^2;
 Q = diag(Qii);
 R = diag(Rii);
 
-[Klqr,Pc]=lqr(A,B,Q,R); % Solução do problema LQR de horizonte Infinito
+Klqr = lqr(A,B,Q,R); % Solução do problema LQR de horizonte Infinito
 
-N = pinv([A B; C D])*[zeros(4,4); eye(4)];
+%% Filtro de Kalman
+% Inicialização
+X = [P(1:2); V(1:2)];
+P0 = diag([1 1 1 1].^2);
+xkkm1=X;
+Pkkm1=P0;
 
-K = ones(2,4);
-Nx = N(1:4,:);
-Nu = N(5:6,:);
+%% Matrizes de ponderação KF
+% Regra de Bryson
+Rw = diag([100 100 100 100].^2);
+Rv = diag([100 100 100 100]).^2;
 
 figure();
 
@@ -81,7 +90,24 @@ for t = 0:T_run:T_exp
     tempo = [tempo t];
     t_run = tic;
 
-    X = [P(1:2); V(1:2)]; % Vetor de estados
+    % Inovação (Kalman)
+    X = [P(1:2); V(1:2)]; % Estados medidos em condições ideais
+    y = C*X + D*nu; % Saída medida
+    etak = y - C*xkkm1; 
+    Sk = C*Pkkm1*C' + Rv;
+
+    % Correção
+    K = Pkkm1*C'/Sk;
+    xkk = xkkm1 + K*etak;
+    Pkk = (eye(4) - K*C)*Pkkm1;
+
+    % Predição
+    xkp1k = A*xkk;
+    Pkp1k = A*Pkk*A' + Rw;
+
+    % Volta ao Passo 1
+    xkkm1 = xkp1k;
+    Pkkm1 = Pkp1k;
 
     %% PLANEJADOR DE MOVIMENTO
 
@@ -93,16 +119,21 @@ for t = 0:T_run:T_exp
     Xr = [Pd(1:2); Vd(1:2)]; % Vetor de Estados de referência
 
     % % Orientação
-    psid = [0; 0]; % Orientação desejada
+    psid = [atan2(Vd(2),Vd(1)); 0]; % Orientação desejada
 
     pd = [pd Pd(1:3)]; % Armazenamento da posição desejada
     pveld = [pveld Vd(1:3)]; % Armazenamento da velocidade desejada
-    paccd = [paccd Vd_dot(1:3)]; % Armazenamento da aceleração desejada
     ppsid = [ppsid psid(1)]; % Armazenamento da orientação desejada
 
     %% LEI DE CONTROLE
 
-    nu = - Klqr*(X - Xr);
+    if flag_u == 1
+        nu = - Klqr*(X-Xr);
+    else if flag_u == 2
+            X = xkk;
+            nu = - Klqr*(X-Xr);
+    end
+    end
 
     %% Controle em z
 
@@ -127,8 +158,6 @@ for t = 0:T_run:T_exp
     u = [nu(1); nu(2); Z_dot_ref; psi_dot_ref]; % Vetor de comandos de controle Linear
 
     %% Simulação por discretização (x e y)
-
-    sysd = c2d(sysc,T_run,'tustin');
     Xkss = sysd.A*X + sysd.B*nu;
     P(1) = Xkss(1); P(2) = Xkss(2); V(1) = Xkss(3); V(2) = Xkss(4);
 
