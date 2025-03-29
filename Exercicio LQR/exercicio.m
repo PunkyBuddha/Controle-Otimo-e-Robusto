@@ -1,4 +1,4 @@
-close all; clc;
+close all; clc; clear;
 %% Modelo massa-mola-amortecedor triplo
 m1=0.5; %kg
 m2=0.5; %kg
@@ -36,7 +36,7 @@ x0=[-5 5 5 1 0 -1]';
 Cc = ctrb(A,B);
 %% Calculo do ganho LQR
 %% LQR de Horizonte Finito 
-T=3;
+T=3; 
 PT=zeros(6); % Control effort is zero at t = T
 % PT = eye(6); % Other designed scenario
 % Solução da Equação Diferencial de Riccati (numérica)

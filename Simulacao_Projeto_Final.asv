@@ -27,19 +27,19 @@ pu = []; % Esforço de controlador
 er = []; % Erro para plot
 ppsid = []; % Orientação desejada
 ppsir = []; % Orientação realizada
+X0 = [0;0;0;0]; % Vetor de estados iniciais 
+Xh = [0;0;0;0]; % Vetor de estados estimados 
 
 %% Ganhos / Parametros
-w = (2*pi)/15;
-Kd = diag([3 6]);
-Kp = diag([4.5 8.5]);
+w = (2*pi)/15; % Frequência da trajetória
 Ku = diag([.88 .88]);
 Kv = diag([0.18227 0.17095]);
 Kz = 1;
 K_psi = 1;
 
 %% Escolha do controlador
-% 1 - LQR
-flag_u = 1;
+% 1 - LQR; 2 - LQG
+flag_u = 2;
 
 %% Modelo em Espaço de Estados
 A = [0 0     1       0;
@@ -48,33 +48,41 @@ A = [0 0     1       0;
      0 0     0   -Kv(2,2)];
 B = [0 0 Ku(1,1)   0;
      0 0    0   Ku(2,2)]';
-C = eye(4);
-D = zeros(4,2);
+C = [eye(2) zeros(2)];
+D = zeros(2,2);
 
 sysc = ss(A,B,C,D); % Sistema em tempo continuo
 sysd = c2d(sysc,T_run,'tustin'); % Sistema em tempo discreto
 
 %% Matrizes de ponderação LQR
 % Regra de Bryson
-Qii = [.01 .01 10 10].^-2;
-Rii = [5 5].^2;
+Qii = [.05 .05 1 1].^-2;
+Rii = [1 1].^2;
 
-Q = diag(Qii);
-R = diag(Rii);
+Q1 = diag(Qii);
+R1 = diag(Rii);
 
-Klqr = lqr(A,B,Q,R); % Solução do problema LQR de horizonte Infinito
+Plqr = care(A,B,Q1,R1); % Solução da Equação Algébrica e Riccati
+Klqr = R1\B'*Plqr; % Ganho LQR de horizonte infinito 
 
 %% Filtro de Kalman
-% Inicialização
-X = [P(1:2); V(1:2)];
-P0 = diag([1 1 1 1].^2);
-xkkm1=X;
-Pkkm1=P0;
+Rw = diag([.9 . 1 1].^2);
+Rv = diag([4]).^2;
+PT = zeros(4);
 
-%% Matrizes de ponderação KF
-% Regra de Bryson
-Rw = diag([10 10 10 10].^2);
-Rv = diag([10 10 10 10]).^2;
+% Solução da Equação Diferencial de Riccati (numérica)
+opt = odeset('AbsTol',1.0e-8,'RelTol',1.0e-8);
+[tvP,vP] = ode45(@(t,x) riccatiDE(t,x,A,B,Rw,Rv), [1,0], reshape(PT,4*4,1),opt);
+
+for i=1:length(tvP)
+    for k=1:4*4
+        vPk(k) = interp1(tvP(end:-1:1)',vP(end:-1:1,k)',tvP(i));
+    end
+    P1=reshape(vPk,4,4);
+end
+
+L = P1*C'*inv(Rv);
+syskf = ss((A-L*C),L,C,0,T_run);
 
 figure();
 
@@ -89,20 +97,10 @@ figure();
 for t = 0:T_run:T_exp
     tempo = [tempo t];
     t_run = tic;
-
-    % Inovação (Kalman)
-    X = [P(1:2); V(1:2)]; % Estados medidos em condições ideais
-    y = C*X + D*nu; % Saída medida
-    etak = y - C*xkkm1; 
-    Sk = C*Pkkm1*C' + Rv;
-
-    % Correção
-    K{k} = Pkkm1*C'/Sk;
-    xkk{k} = xkkm1+K{k}*etak;
-    Pkk{k} = (eye(4)-K{k}*C)*Pkkm1;
+    Xh = syskf.A*Xh + syskf.B*nu;
+    X = [P(1:2); V(1:2)];
 
     %% PLANEJADOR DE MOVIMENTO
-
     % % Lemniscata
     Pd = [sin(w*t); sin(2*w*t); 1]; % Posição desejada
     Vd = [cos(w*t)*w; cos(2*w*t)*2*w; 0]; % Velocidade desejada
@@ -111,7 +109,7 @@ for t = 0:T_run:T_exp
     Xr = [Pd(1:2); Vd(1:2)]; % Vetor de Estados de referência
 
     % % Orientação
-    psid = [atan2(Vd(2),Vd(1)); 0]; % Orientação desejada
+    psid = [0; 0]; % Orientação desejada
 
     pd = [pd Pd(1:3)]; % Armazenamento da posição desejada
     pveld = [pveld Vd(1:3)]; % Armazenamento da velocidade desejada
@@ -120,14 +118,17 @@ for t = 0:T_run:T_exp
     %% LEI DE CONTROLE
 
     if flag_u == 1
-        nu = - Klqr*(X-Xr);
+        nu = - Klqr*(X - Xr);
+    else if flag_u == 2
+            nu = - Klqr*(Xh - Xr);   
+    end
     end
 
     %% Controle em z
 
     Z_dot_ref = Vd(3) + Kz*(Pd(3) - P(3)); % Velocidade de referência em z
-
     Z_dot_ref = min(max(Z_dot_ref,-1),1); % Saturação de +-1m/s em z
+
     V(3) =  Z_dot_ref;
 
     %% Controle de orientação
@@ -146,7 +147,12 @@ for t = 0:T_run:T_exp
     u = [nu(1); nu(2); Z_dot_ref; psi_dot_ref]; % Vetor de comandos de controle Linear
 
     %% Simulação por discretização (x e y)
-    Xkss = sysd.A*X + sysd.B*nu;
+    if flag_u == 1
+        Xkss = sysd.A*X + sysd.B*nu;
+    else if flag_u == 2
+            Xkss = sysd.A*Xh + sysd.B*nu;
+    end
+    end
     P(1) = Xkss(1); P(2) = Xkss(2); V(1) = Xkss(3); V(2) = Xkss(4);
 
     %% Simulação por integração numérica (z e psi)
