@@ -6,7 +6,7 @@ end
 rosshutdown;
 
 %% Timers
-T_exp = 30; % Tempo de experimento
+T_exp = 60; % Tempo de experimento
 t_exp = tic;
 T_run = 1/30; % Período do experimento
 t_run = tic;
@@ -14,11 +14,11 @@ T_draw=0;
 tempo = [];
 
 %% Vetores de armazenamento
-P = [0;0;0];
-V = [0;0;0];
-V_dot = [0;0;0];
-nu = [0;0];
-psi = 0;
+P = [0;0;0]; % Vetor de posição
+V = [0;0;0]; % Vetor de velocidade
+V_dot = [0;0;0]; % Vetor de aceleração
+nu = [0;0]; % Vetor de controle
+psi = 0; % Orientação Psi
 pd = []; % Posição desejada para plot
 pr = []; % Posição realizada para plot
 pveld = []; % Velocidade desejada para plot
@@ -31,11 +31,11 @@ X0 = [0;0;0;0]; % Vetor de estados iniciais
 Xh = [0;0;0;0]; % Vetor de estados estimados 
 
 %% Ganhos / Parametros
-w = (2*pi)/15; % Frequência da trajetória
-Ku = diag([.88 .88]);
-Kv = diag([0.18227 0.17095]);
-Kz = 1;
-K_psi = 1;
+w = (2*pi)/30; % Frequência da trajetória
+Ku = diag([.88 .88]); % Matriz de parâmetros do modelo relacionado ao controlador
+Kv = diag([0.18227 0.17095]); % Matriz de parâmetros do modelo relacionado a velocidade tangencial
+Kz = 1; % Ganho proporcional em Z
+K_psi = 1; % Ganho proporcional em psi
 
 %% Escolha do controlador
 % 1 - LQR; 2 - LQG
@@ -48,57 +48,59 @@ A = [0 0     1       0;
      0 0     0   -Kv(2,2)];
 B = [0 0 Ku(1,1)   0;
      0 0    0   Ku(2,2)]';
-C = [eye(2) zeros(2)];
-D = zeros(2,2);
+C = eye(4);
+D = zeros(4,2);
 
 sysc = ss(A,B,C,D); % Sistema em tempo continuo
 sysd = c2d(sysc,T_run,'tustin'); % Sistema em tempo discreto
 
 %% Matrizes de ponderação LQR
 % Regra de Bryson
-Qii = [.035 .035 5 5].^-2;
-Rii = [2 2].^2;
+Qii = [.01 .01 .1 .1].^-2;  
+Rii = [1 1].^2;
 
-Q1 = diag(Qii);
-R1 = diag(Rii);
+Q1 = diag(Qii); % Matriz de peso para os estados
+R1 = diag(Rii); % Matriz de peso para o controlador
 
 Plqr = care(A,B,Q1,R1); % Solução da Equação Algébrica e Riccati
 Klqr = R1\B'*Plqr; % Ganho LQR de horizonte infinito 
 
 %% Filtro de Kalman
-Rw = diag([.7 .7 1 1].^2);
-Rv = diag([2.5]).^2;
-PT = zeros(4);
+Rw = diag([2.5 2 .1 .1].^2); % Matriz de covariância do ruído de processo
+Rv = diag([2]).^2; % Matriz de covariância do ruído de medida
 
-% Solução da Equação Diferencial de Riccati (numérica)
-opt = odeset('AbsTol',1.0e-8,'RelTol',1.0e-8);
-[tvP,vP] = ode45(@(t,x) riccatiDE(t,x,A,B,Rw,Rv), [1,0], reshape(PT,4*4,1),opt);
+Pkf = care(A,C,Rw,Rv); % Solução da Equação Algébrica e Riccati
 
-for i=1:length(tvP)
-    for k=1:4*4
-        vPk(k) = interp1(tvP(end:-1:1)',vP(end:-1:1,k)',tvP(i));
-    end
-    P1=reshape(vPk,4,4);
-end
-
-L = P1*C'*inv(Rv);
-syskf = ss((A-L*C),L,C,0,T_run);
+%% KF - Inicialização
+xkkm1 = X0; % Estado inicial
+Pkkm1 = Pkf; % Covariância de erro inicial
 
 figure();
 
-% while toc(t_exp) < T_exp
-%     if toc(t_run) > T_run
-%         tempo = [tempo toc(t_exp)];
-%         dt = toc(t_run);
-%         t_run = tic;
-%         t = toc(t_exp);
-%         t_corpo = tic;
+while toc(t_exp) < T_exp
+    if toc(t_run) > T_run
+        tempo = [tempo toc(t_exp)];
+        dt = toc(t_run);
+        t_run = tic;
+        t = toc(t_exp);
+        t_corpo = tic;
 
-for t = 0:T_run:T_exp
-    tempo = [tempo t];
-    t_run = tic;
-    Xh = syskf.A*Xh + syskf.B*nu;
-    X = [P(1:2); V(1:2)];
+% for t = 0:T_run:T_exp
+%     tempo = [tempo t];
+%     t_run = tic;
+    
+    X = [P(1:2); V(1:2)]; % Matriz de Estados
+
+    if flag_u == 2
+    %% KF - Inovação (Medida Recente)
+    nk = X - sysd.C*xkkm1; % Erro de previsão
+    Sk = sysd.C*Pkkm1*sysd.C' + Rv; % Covariância da inovação nk
+
+    %% KF - Correção
+    Kk = Pkkm1*sysd.C'*inv(Sk); % Ganho de Kalman
+    Xh = xkkm1 + Kk*nk; % Estado estimado
+    Pkk = (eye(4) - Kk*sysd.C)*Pkkm1; % Covariância de erro
+    end
 
     %% PLANEJADOR DE MOVIMENTO
     % % Lemniscata
@@ -118,9 +120,9 @@ for t = 0:T_run:T_exp
     %% LEI DE CONTROLE
 
     if flag_u == 1
-        nu = - Klqr*(X - Xr);
+        nu = - Klqr*(X - Xr); % Lei de controle com LQR usando estados reais
     else if flag_u == 2
-            nu = - Klqr*(Xh - Xr);   
+            nu = - Klqr*(Xh - Xr); % Lei de controle com LQR usando estados estimados por filtro de Kalman (LQG)  
     end
     end
 
@@ -129,7 +131,7 @@ for t = 0:T_run:T_exp
     Z_dot_ref = Vd(3) + Kz*(Pd(3) - P(3)); % Velocidade de referência em z
     Z_dot_ref = min(max(Z_dot_ref,-1),1); % Saturação de +-1m/s em z
 
-    V(3) =  Z_dot_ref;
+    V(3) =  Z_dot_ref; 
 
     %% Controle de orientação
 
@@ -148,11 +150,15 @@ for t = 0:T_run:T_exp
 
     %% Simulação por discretização (x e y)
     if flag_u == 1
-        Xkss = sysd.A*X + sysd.B*nu;
+        Xkss = sysd.A*X + sysd.B*nu; % Reconstrução dos estados
     else if flag_u == 2
-            Xkss = sysd.A*Xh + sysd.B*nu;
+            %% KF - Prediction
+            Xkss = sysd.A*Xh + sysd.B*nu; % Reconstrução dos estados estimados
+            xkkm1 = Xkss + sqrt(Rw)*[randn(1);randn(1);0;0]; % Incersão de ruído nos estados
+            Pkm1k = sysd.A*Pkk*sysd.A' + Rw; Pkkm1 = Pkm1k; % Reconstrução da matriz de covariância de erro
     end
     end
+
     P(1) = Xkss(1); P(2) = Xkss(2); V(1) = Xkss(3); V(2) = Xkss(4);
 
     %% Simulação por integração numérica (z e psi)
@@ -160,7 +166,7 @@ for t = 0:T_run:T_exp
     psi = psi + psi_dot_ref*T_run; % Integração de psi_dot para encontrar orientação
 
     pr = [pr P(1:3)]; % Recebe a posição para plot de trajetoria
-    pvelr = [pvelr V(1:3)];
+    pvelr = [pvelr V(1:3)]; % Recebe a Velocidade para plot
     ppsir = [ppsir psi]; % Recebe orientação para calculo de erro
 
     pu = [pu u];
@@ -182,12 +188,12 @@ for t = 0:T_run:T_exp
         drawnow
     end
 end
-% end
+end
 
-er = pd - pr; % Calculo de erros de posicionamento
-err = ppsid - ppsir;
-d_ec=sqrt(er(1,:).^2+er(2,:).^2); % Calculo de erro euclidiano
+er = pd - pr; % Calculo de erros de posicionamento (z, y e z)
+err = ppsid - ppsir; % Cálculo de erro de orientação (Psi)
 
+%% Plot dos gráficos de Erro (x, y, z e Psi)
 figure('Name','Graficos de erro')
 subplot(4,1,1)
 plot (tempo,er(1,:),'b','LineWidth',1);
@@ -206,6 +212,7 @@ plot (tempo,err,'c','LineWidth',1)
 xlabel('Tempo(s)');ylabel('Erro em psi(rad)');
 grid on
 
+%% Plot dos gráficos de Posição VS Tempo (x, y,z e Psi)
 figure('Name','Gráficos de posição vs Tempo')
 subplot(4,1,1)
 plot (tempo,pr(1,:),'r','LineWidth',1);
@@ -236,6 +243,7 @@ xlabel('Tempo(s)');ylabel('Posição em psi (rad)');
 legend('Posição realizada','Posição desejada');
 grid on
 
+%% Plot de Gráficos de Velocidade VS Tempo (x, y e z)
 figure('Name','Gráficos de velocidade vs Tempo')
 subplot(3,1,1)
 plot (tempo,pvelr(1,:),'r','LineWidth',1);
@@ -259,14 +267,15 @@ xlabel('Tempo(s)');ylabel('Velocidade em z (m/s)');
 legend('Velocidade realizada','Velocidade desejada');
 grid on
 
+%% Plot dos Gráficos de esforço de controlador (x, y, z e Psi)
 figure('Name','Esforço do controlador')
 subplot(4,1,1)
 plot (tempo,pu(1,:),'b');
-xlabel('Tempo(s)');ylabel('Esforço do controlador em theta');
+xlabel('Tempo(s)');ylabel('Esforço do controlador em x');
 grid on
 subplot(4,1,2)
 plot (tempo,pu(2,:),'b');
-xlabel('Tempo(s)');ylabel('Esforço do controlador em phi');
+xlabel('Tempo(s)');ylabel('Esforço do controlador em y');
 grid on
 subplot(4,1,3)
 plot (tempo,pu(3,:),'b');
@@ -276,4 +285,3 @@ subplot(4,1,4)
 plot (tempo,pu(4,:),'b');
 xlabel('Tempo(s)');ylabel('Esforço do controlador em psi');
 grid on
-
