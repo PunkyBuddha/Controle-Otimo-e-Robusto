@@ -151,7 +151,7 @@ for t = 0:T_run:T_exp
             nu = - Klqr*(Xh - Xr); % Lei de controle com LQR usando estados estimados por filtro de Kalman (LQG)  
     else if flag_u == 3
             nu = Khinf.C*Xh1;
-            y = sysd.C*(1.4*X - Xr);
+            y = sysd.C*X;
     end
     end
     end
@@ -187,7 +187,7 @@ for t = 0:T_run:T_exp
             xkkm1 = Xkss + sqrt(Rw)*[randn(1);randn(1);0;0]; % Incersão de ruído nos estados
             Pkm1k = sysd.A*Pkk*sysd.A' + Rw; Pkkm1 = Pkm1k + sqrt(Rv)*[randn(1);randn(1);0;0]; % Reconstrução da matriz de covariância de erro
     else if flag_u == 3 
-            Xkss = sysd.A*X + asysd.B*[Xr;zeros(4,1)] + sysd.B*nu;
+            Xkss = sysd.A*X + 3.*asysd.B*[Xr;zeros(4,1)] + sysd.B*nu;
             Xh1 = Khinfd.A*Xh1 + Khinfd.B*y;
             xkkm1 = Xkss;
     end
