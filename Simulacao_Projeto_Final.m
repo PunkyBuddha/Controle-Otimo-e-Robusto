@@ -150,8 +150,7 @@ for t = 0:T_run:T_exp
     else if flag_u == 2
             nu = - Klqr*(Xh - Xr); % Lei de controle com LQR usando estados estimados por filtro de Kalman (LQG)  
     else if flag_u == 3
-            nu = Khinf.C*Xh1;
-            y = sysd.C*(1.4*X - Xr);
+            nu = Khinf.C*Xh1; % Lei de controle utilizando H infinito
     end
     end
     end
@@ -187,9 +186,9 @@ for t = 0:T_run:T_exp
             xkkm1 = Xkss + sqrt(Rw)*[randn(1);randn(1);0;0]; % Incersão de ruído nos estados
             Pkm1k = sysd.A*Pkk*sysd.A' + Rw; Pkkm1 = Pkm1k + sqrt(Rv)*[randn(1);randn(1);0;0]; % Reconstrução da matriz de covariância de erro
     else if flag_u == 3 
-            Xkss = sysd.A*X + asysd.B*[Xr;zeros(4,1)] + sysd.B*nu;
-            Xh1 = Khinfd.A*Xh1 + Khinfd.B*y;
-            xkkm1 = Xkss;
+            y = sysd.C*(1.4*X - Xr); % Referência de controle do sistema
+            Xkss = sysd.A*X + asysd.B*[Xr;zeros(4,1)] + sysd.B*nu; % Reconstrução dos estados
+            Xh1 = Khinfd.A*Xh1 + Khinfd.B*y; % Dinâmica do sistema aumentado
     end
     end
     end
@@ -229,94 +228,94 @@ er = pd - pr; % Calculo de erros de posicionamento (z, y e z)
 err = ppsid - ppsir; % Cálculo de erro de orientação (Psi)
 
 %% Plot dos gráficos de Erro (x, y, z e Psi)
-% figure('Name','Graficos de erro')
-% subplot(4,1,1)
-% plot (tempo,er(1,:),'b','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Erro em x(m)');
-% grid on
-% subplot(4,1,2)
-% plot (tempo,er(2,:),'r','LineWidth',1)
-% xlabel('Tempo(s)');ylabel('Erro em y(m)');
-% grid on
-% subplot(4,1,3)
-% plot (tempo,er(3,:),'k','LineWidth',1)
-% xlabel('Tempo(s)');ylabel('Erro em z(m)');
-% grid on
-% subplot(4,1,4)
-% plot (tempo,err,'c','LineWidth',1)
-% xlabel('Tempo(s)');ylabel('Erro em psi(rad)');
-% grid on
-% 
-% %% Plot dos gráficos de Posição VS Tempo (x, y,z e Psi)
-% figure('Name','Gráficos de posição vs Tempo')
-% subplot(4,1,1)
-% plot (tempo,pr(1,:),'r','LineWidth',1);
-% hold on
-% plot (tempo,pd(1,:),'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Posição em x (m)');
-% legend('Posição realizada','Posição desejada');
-% grid on
-% subplot(4,1,2)
-% plot (tempo,pr(2,:),'r','LineWidth',1);
-% hold on
-% plot (tempo,pd(2,:),'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Posição em y (m)');
-% legend('Posição realizada','Posição desejada');
-% grid on
-% subplot(4,1,3)
-% plot (tempo,pr(3,:),'r','LineWidth',1);
-% hold on
-% plot (tempo,pd(3,:),'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Posição em z (m)');
-% legend('Posição realizada','Posição desejada');
-% grid on
-% subplot(4,1,4)
-% plot (tempo,ppsir,'r','LineWidth',1);
-% hold on
-% plot (tempo,ppsid,'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Posição em psi (rad)');
-% legend('Posição realizada','Posição desejada');
-% grid on
-% 
-% %% Plot de Gráficos de Velocidade VS Tempo (x, y e z)
-% figure('Name','Gráficos de velocidade vs Tempo')
-% subplot(3,1,1)
-% plot (tempo,pvelr(1,:),'r','LineWidth',1);
-% hold on
-% plot (tempo,pveld(1,:),'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Velocidade em x (m/s)');
-% legend('Velocidade realizada','Velocidade desejada');
-% grid on
-% subplot(3,1,2)
-% plot (tempo,pvelr(2,:),'r','LineWidth',1);
-% hold on
-% plot (tempo,pveld(2,:),'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Velocidade em y (m/s)');
-% legend('Velocidade realizada','Velocidade desejada');
-% grid on
-% subplot(3,1,3)
-% plot (tempo,pvelr(3,:),'r','LineWidth',1);
-% hold on
-% plot (tempo,pveld(3,:),'b--','LineWidth',1);
-% xlabel('Tempo(s)');ylabel('Velocidade em z (m/s)');
-% legend('Velocidade realizada','Velocidade desejada');
-% grid on
-% 
-% %% Plot dos Gráficos de esforço de controlador (x, y, z e Psi)
-% figure('Name','Esforço do controlador')
-% subplot(4,1,1)
-% plot (tempo,pu(1,:),'b');
-% xlabel('Tempo(s)');ylabel('Esforço do controlador em x');
-% grid on
-% subplot(4,1,2)
-% plot (tempo,pu(2,:),'b');
-% xlabel('Tempo(s)');ylabel('Esforço do controlador em y');
-% grid on
-% subplot(4,1,3)
-% plot (tempo,pu(3,:),'b');
-% xlabel('Tempo(s)');ylabel('Esforço do controlador em z');
-% grid on
-% subplot(4,1,4)
-% plot (tempo,pu(4,:),'b');
-% xlabel('Tempo(s)');ylabel('Esforço do controlador em psi');
-% grid on
+figure('Name','Graficos de erro')
+subplot(4,1,1)
+plot (tempo,er(1,:),'b','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Erro em x(m)');
+grid on
+subplot(4,1,2)
+plot (tempo,er(2,:),'r','LineWidth',1)
+xlabel('Tempo(s)');ylabel('Erro em y(m)');
+grid on
+subplot(4,1,3)
+plot (tempo,er(3,:),'k','LineWidth',1)
+xlabel('Tempo(s)');ylabel('Erro em z(m)');
+grid on
+subplot(4,1,4)
+plot (tempo,err,'c','LineWidth',1)
+xlabel('Tempo(s)');ylabel('Erro em psi(rad)');
+grid on
+
+%% Plot dos gráficos de Posição VS Tempo (x, y,z e Psi)
+figure('Name','Gráficos de posição vs Tempo')
+subplot(4,1,1)
+plot (tempo,pr(1,:),'r','LineWidth',1);
+hold on
+plot (tempo,pd(1,:),'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Posição em x (m)');
+legend('Posição realizada','Posição desejada');
+grid on
+subplot(4,1,2)
+plot (tempo,pr(2,:),'r','LineWidth',1);
+hold on
+plot (tempo,pd(2,:),'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Posição em y (m)');
+legend('Posição realizada','Posição desejada');
+grid on
+subplot(4,1,3)
+plot (tempo,pr(3,:),'r','LineWidth',1);
+hold on
+plot (tempo,pd(3,:),'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Posição em z (m)');
+legend('Posição realizada','Posição desejada');
+grid on
+subplot(4,1,4)
+plot (tempo,ppsir,'r','LineWidth',1);
+hold on
+plot (tempo,ppsid,'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Posição em psi (rad)');
+legend('Posição realizada','Posição desejada');
+grid on
+
+%% Plot de Gráficos de Velocidade VS Tempo (x, y e z)
+figure('Name','Gráficos de velocidade vs Tempo')
+subplot(3,1,1)
+plot (tempo,pvelr(1,:),'r','LineWidth',1);
+hold on
+plot (tempo,pveld(1,:),'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Velocidade em x (m/s)');
+legend('Velocidade realizada','Velocidade desejada');
+grid on
+subplot(3,1,2)
+plot (tempo,pvelr(2,:),'r','LineWidth',1);
+hold on
+plot (tempo,pveld(2,:),'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Velocidade em y (m/s)');
+legend('Velocidade realizada','Velocidade desejada');
+grid on
+subplot(3,1,3)
+plot (tempo,pvelr(3,:),'r','LineWidth',1);
+hold on
+plot (tempo,pveld(3,:),'b--','LineWidth',1);
+xlabel('Tempo(s)');ylabel('Velocidade em z (m/s)');
+legend('Velocidade realizada','Velocidade desejada');
+grid on
+
+%% Plot dos Gráficos de esforço de controlador (x, y, z e Psi)
+figure('Name','Esforço do controlador')
+subplot(4,1,1)
+plot (tempo,pu(1,:),'b');
+xlabel('Tempo(s)');ylabel('Esforço do controlador em x');
+grid on
+subplot(4,1,2)
+plot (tempo,pu(2,:),'b');
+xlabel('Tempo(s)');ylabel('Esforço do controlador em y');
+grid on
+subplot(4,1,3)
+plot (tempo,pu(3,:),'b');
+xlabel('Tempo(s)');ylabel('Esforço do controlador em z');
+grid on
+subplot(4,1,4)
+plot (tempo,pu(4,:),'b');
+xlabel('Tempo(s)');ylabel('Esforço do controlador em psi');
+grid on
