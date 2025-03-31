@@ -102,17 +102,17 @@ asysd = c2d(asys,T_run,'Tustin')
 
 figure();
 
-% while toc(t_exp) < T_exp
-%     if toc(t_run) > T_run
-%         tempo = [tempo toc(t_exp)];
-%         dt = toc(t_run);
-%         t_run = tic;
-%         t = toc(t_exp);
-%         t_corpo = tic;
+while toc(t_exp) < T_exp
+    if toc(t_run) > T_run
+        tempo = [tempo toc(t_exp)];
+        dt = toc(t_run);
+        t_run = tic;
+        t = toc(t_exp);
+        t_corpo = tic;
 
-for t = 0:T_run:T_exp
-    tempo = [tempo t];
-    t_run = tic;
+% for t = 0:T_run:T_exp
+%     tempo = [tempo t];
+%     t_run = tic;
     
    
     X = [P(1:2); V(1:2)]; % Matriz de Estados
@@ -222,7 +222,7 @@ for t = 0:T_run:T_exp
         drawnow
     end
 end
-% end
+end
 
 er = pd - pr; % Calculo de erros de posicionamento (z, y e z)
 err = ppsid - ppsir; % Cálculo de erro de orientação (Psi)
